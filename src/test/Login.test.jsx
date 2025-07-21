@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import Login from "../pages/Login";
-import * as storageUtils from "../utils/storage";
 
 
 const mockNavigate = jest.fn();
@@ -11,55 +11,49 @@ jest.mock("react-router-dom", () => ({
 }));
 
 
-beforeEach(() => {
-  Storage.prototype.setItem = jest.fn();
-  Storage.prototype.getItem = jest.fn();
-});
+jest.mock("../context/AuthContext", () => ({
+  useAuth: jest.fn(),
+}));
 
 describe("Login Page", () => {
-  it("renders input and button", () => {
+  const mockLogin = jest.fn();
+
+  beforeEach(() => {
+    useAuth.mockReturnValue({ login: mockLogin });
+    mockLogin.mockClear();
+    mockNavigate.mockClear();
+  });
+
+  const renderComponent = () =>
     render(
-      <MemoryRouter>
+      <BrowserRouter>
         <Login />
-      </MemoryRouter>
+      </BrowserRouter>
     );
 
-    expect(screen.getByPlaceholderText(/enter your name/i)).toBeInTheDocument();
+  it("renders input and button", () => {
+    renderComponent();
+    expect(screen.getByPlaceholderText("Enter your name")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /login/i })).toBeInTheDocument();
   });
 
-  it("shows validation error when username is empty", async () => {
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>
-    );
+  it("shows validation error when input is empty", async () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole("button", { name: /login/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Name is required")).toBeInTheDocument();
+    });
+  });
+
+  it("calls login and navigates on valid input", async () => {
+    renderComponent();
+    const input = screen.getByPlaceholderText("Enter your name");
+    fireEvent.change(input, { target: { value: "Mishab" } });
 
     fireEvent.click(screen.getByRole("button", { name: /login/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/name is required/i)).toBeInTheDocument();
-    });
-  });
-
-  it("stores username in localStorage and navigates", async () => {
-    const spy = jest.spyOn(storageUtils, "setToStorage");
-
-    render(
-      <MemoryRouter>
-        <Login />
-      </MemoryRouter>
-    );
-
-    const input = screen.getByPlaceholderText(/enter your name/i);
-    const button = screen.getByRole("button", { name: /login/i });
-
-    fireEvent.change(input, { target: { value: "Mishab" } });
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(spy).toHaveBeenCalledWith("loggedInUser", "Mishab");
-      expect(spy).toHaveBeenCalledWith("todos_Mishab", []);
+      expect(mockLogin).toHaveBeenCalledWith("Mishab");
       expect(mockNavigate).toHaveBeenCalledWith("/");
     });
   });
